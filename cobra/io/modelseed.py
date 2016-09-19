@@ -17,10 +17,10 @@ modelseed_url = 'https://p3.theseed.org/services/ProbModelSEED'
 workspace_url = 'https://p3.theseed.org/services/Workspace'
 
 # Regular expression for compartment suffix on ModelSEED IDs
-modelseed_suffix = re.compile(r'_([a-z])\d*$')  # or + instead of *
+modelseed_suffix_re = re.compile(r'_([a-z])\d*$')
 
 # Regular expression for prefix on PATRIC gene IDs
-patric_gene_prefix = re.compile(r'^fig\|')
+patric_gene_prefix_re = re.compile(r'^fig\|')
 
 
 def delete_modelseed_model(reference):
@@ -150,7 +150,7 @@ def get_modelseed_gapfill_solutions(reference):
                  .format(sol['id'], len(sol['solution_reactions'])))
         sol['reactions'] = dict()
         for reaction in sol['solution_reactions'][0]:
-            reaction_id = '{0}_{1}'.format(re.sub(modelseed_suffix, '', reaction['reaction'].split('/')[-1]),
+            reaction_id = '{0}_{1}'.format(re.sub(modelseed_suffix_re, '', reaction['reaction'].split('/')[-1]),
                                            reaction['compartment'])
             sol['reactions'][reaction_id] = reaction
         del sol['solution_reactions']
@@ -228,35 +228,41 @@ def list_modelseed_models(root_path=None):
         handle_server_error(e)
 
 
-def _convert_compartment(modelseed_id, id_type):
-    """ Convert a compartment ID in ModelSEED format to another format.
+def _convert_compartment(modelseed_id, format_type):
+    """ Convert a compartment ID in ModelSEED source format to another format.
 
-        @param modelseed_id: Compartment ID in ModelSEED format
-        @param id_type: Type of ID to convert to
+        @param modelseed_id: Compartment ID in ModelSEED source format
+        @param format_type: Type of format to convert to
         @return: ID in specified format
     """
 
-    if id_type == 'cobra':
+    if format_type == 'modelseed' or format_type == 'bigg':
         return modelseed_id[0]
 
     return modelseed_id
 
 
-def _convert_id(modelseed_id, id_type):
-    """ Convert an ID in ModelSEED format to another format.
+def _convert_suffix(modelseed_id, format_type):
+    """ Convert a string with a compartment suffix from ModelSEED source format to another format.
 
-        @param modelseed_id: ID in ModelSEED format
-        @param id_type: Type of ID to convert to
+        @param modelseed_id: String with compartment suffix in ModelSEED source format
+        @param format_type: Type of format to convert to
         @return: ID in specified format
     """
 
-    # Convert to COBRA type. For example, rxn00001_c0 becomes rxn00001[c].
-    if id_type == 'cobra':
-        match = re.search(modelseed_suffix, modelseed_id)
-        compartment = match.group(1)
-        return re.sub(modelseed_suffix, '', modelseed_id) + '[{0}]'.format(compartment)
+    # Remove compartment index number for ModelSEED format. For example, rxn00001_c0 becomes rxn00001_c.
+    # ModelSEED always uses compartment index 0 anyway.
+    if format_type == 'modelseed':
+        compartment = re.search(modelseed_suffix_re, modelseed_id).group(1)
+        return re.sub(modelseed_suffix_re, '', modelseed_id) + '_{0}'.format(compartment)
 
-    # No conversion is needed or id_type is unknown.
+    # Convert to BiGG type format. For example, rxn00001_c0 becomes rxn00001[c].
+    elif format_type == 'bigg':
+        match = re.search(modelseed_suffix_re, modelseed_id)
+        compartment = match.group(1)
+        return re.sub(modelseed_suffix_re, '', modelseed_id) + '[{0}]'.format(compartment)
+
+    # No conversion is needed or format_type is unknown.
     return modelseed_id
 
 
@@ -270,9 +276,9 @@ def _add_metabolite(modelseed_compound, model, id_type):
     """
 
     # Convert from ModelSEED format to COBRApy format.
-    cobra_id = _convert_id(modelseed_compound['id'], id_type)
+    cobra_id = _convert_suffix(modelseed_compound['id'], id_type)
     cobra_compartment = _convert_compartment(modelseed_compound['modelcompartment_ref'].split('/')[-1], id_type)
-    cobra_name = re.sub(modelseed_suffix, '', modelseed_compound['name'])
+    cobra_name = _convert_suffix(modelseed_compound['name'], id_type)
 
     # A ModelSEED model usually contains duplicate compounds. Confirm that the duplicate
     # compound is an exact duplicate and ignore it.
@@ -333,15 +339,15 @@ def _add_reaction(modelseed_reaction, model, id_type, likelihoods):
         upper_bound = 1000.0
 
     # Create the Reaction object.
-    reaction = Reaction(id=_convert_id(modelseed_reaction['id'], id_type),
-                        name=modelseed_reaction['name'],
+    reaction = Reaction(id=_convert_suffix(modelseed_reaction['id'], id_type),
+                        name=re.sub(modelseed_suffix_re, '', modelseed_reaction['name']),
                         lower_bound=lower_bound,
                         upper_bound=upper_bound)
 
     # Create dictionary of metabolites and add them to the reaction.
     metabolites = dict()
     for reagent in modelseed_reaction['modelReactionReagents']:
-        cobra_metabolite_id = _convert_id(reagent['modelcompound_ref'].split('/')[-1], id_type)
+        cobra_metabolite_id = _convert_suffix(reagent['modelcompound_ref'].split('/')[-1], id_type)
         metabolite = model.metabolites.get_by_id(cobra_metabolite_id)
         metabolites[metabolite] = float(reagent['coefficient']) * reverse
     reaction.add_metabolites(metabolites)
@@ -370,7 +376,7 @@ def _add_reaction(modelseed_reaction, model, id_type, likelihoods):
                 for feature in subunit['feature_refs']:
                     # Extract the gene ID from the reference to the feature in the genome and
                     # remove the "fig|" prefix.
-                    gene_id = re.sub(patric_gene_prefix, '', feature.split('/')[-1])
+                    gene_id = re.sub(patric_gene_prefix_re, '', feature.split('/')[-1])
                     if not model.genes.has_id(gene_id):
                         gene = Gene(gene_id, subunit['role'])  # Use the role name as the Gene name
                         model.genes.append(gene)
@@ -419,15 +425,15 @@ def create_cobra_model_from_modelseed_model(reference, id_type='modelseed', vali
     """ Create a COBRA model from a ModelSEED model.
 
         @param reference: Workspace reference to model
-        @param id_type: Type of IDs ('modelseed' for _c0 or 'cobra' for '[c])
+        @param id_type: Type of IDs ('modelseed' for _c or 'bigg' for '[c])
         @param validate: When True, check for common problems
         @return COBRApy Model object
     """
 
     # Validate the id_type parameter.
     if id_type == 'modelseed':
-        cytosol_suffix = '_c0'
-    elif id_type == 'cobra':
+        cytosol_suffix = '_c'
+    elif id_type == 'bigg':
         cytosol_suffix = '[c]'
     else:
         raise ValueError('id_type {0} is not supported'.format(id_type))
@@ -520,7 +526,7 @@ def create_cobra_model_from_modelseed_model(reference, id_type='modelseed', vali
         biomass = data['biomasses'][index]
         biomass_metabolites = dict()
         for biomass_compound in biomass['biomasscompounds']:
-            cobra_id = _convert_id(biomass_compound['modelcompound_ref'].split('/')[-1], id_type)
+            cobra_id = _convert_suffix(biomass_compound['modelcompound_ref'].split('/')[-1], id_type)
             metabolite = model.metabolites.get_by_id(cobra_id)
             biomass_metabolites[metabolite] = biomass_compound['coefficient']
         reaction = Reaction(id=biomass['id'],
