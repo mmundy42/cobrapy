@@ -3,21 +3,30 @@ import pandas as pd
 from tabulate import tabulate
 
 
-# Notes:
-#   For ModelSEED models, I don't understand the boundary reactions rxn13782_c, rxn13783_c,
-#   and rxn13784_c which I think are sink reactions for protein biosynthesis, DNA replication,
-#   and RNA transcrption.  The compounds show up as being consumed but are produced by the
-#   biomass reaction.
+"""
+Notes
+-----
+    For ModelSEED models, I don't understand the boundary reactions rxn13782_c, rxn13783_c,
+    and rxn13784_c which I think are sink reactions for protein biosynthesis, DNA replication,
+    and RNA transcrption.  The compounds show up as being consumed but are produced by the
+    biomass reaction.
+"""
+
 
 def format_long_string(string, max_length):
     """ Format a string so it fits in column of a specific width.
 
-    Args:
-        string: String to format
-        max_length: Maximum length of returned string
+    Parameters
+    ----------
+        string : str
+            String to format
+        max_length : int
+            Maximum length of returned string
 
-    Returns:
-        Formated string
+    Returns
+    -------
+        str
+            Formated string
     """
 
     if len(string) > max_length:
@@ -29,13 +38,14 @@ def format_long_string(string, max_length):
 def metabolites_consumed(model, threshold=1E-8, floatfmt='.3f'):
     """ Print the metabolites consumed by the organism with IDs and names.
 
-    Args:
-        model: Model to analyze (must be optimized)
-        threshold (float): Tolerance for determining if a flux is zero
-        floatfmt (str): Format for floats when printed by tabulate
-
-    Returns:
-        Nothing
+    Parameters
+    ----------
+        model
+            Model to analyze (must be optimized)
+        threshold : float)
+            Tolerance for determining if a flux is zero
+        floatfmt : str
+            Format for floats when printed by tabulate
     """
 
     # Build a dictionary of metabolite consumption and production from the boundary reactions.
@@ -71,13 +81,15 @@ def metabolites_consumed(model, threshold=1E-8, floatfmt='.3f'):
 def metabolites_produced(model, threshold=1E-8, floatfmt='.3f'):
     """ Print the metabolites produced by the organism with IDs and names.
 
-    Args:
-        model: Model to analyze (must be optimized)
-        threshold (float): Tolerance for determining if a flux is zero
-        floatfmt (str): Format for floats when printed by tabulate
+    Parameters
+    ----------
+        model
+            Model to analyze (must be optimized)
+        threshold : float, optional
+            Tolerance for determining if a flux is zero
+        floatfmt : str, optional
+            Format for floats when printed by tabulate
 
-    Returns:
-        Nothing
     """
 
     # Build a dictionary of metabolite consumption and production from the boundary reactions.
@@ -114,11 +126,10 @@ def metabolites_produced(model, threshold=1E-8, floatfmt='.3f'):
 def exchange_reactions(model):
     """ Print the exchange reactions in a model with id, name, and definition.
 
-    Args:
-        model: Model to analyze
-
-    Returns:
-        Nothing
+    Parameters
+    ----------
+        model
+            Model to analyze
     """
 
     boundary_reactions = model.reactions.query(lambda x: x, 'boundary')
