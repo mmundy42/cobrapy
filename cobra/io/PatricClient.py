@@ -7,14 +7,29 @@ from getpass import getpass
 import base64
 
 
-def get_patric_token(username, password=None, token_type='rast', timeout=5):
+def get_patric_token(username, password=None, token_type='patric', timeout=5):
     """ Get an authentication token for Patric web services.
 
-        @param username: User name
-        @param password: Password or None to prompt and enter password
-        @param token_type: Type of authentication token
-        @param timeout:  Number of seconds to wait for response
-        @return: Authentication token
+        The authentication token is also stored in the .patric_config file in
+        the user's home directory. The PatricClient object retrieves the
+        authentication token from the file so the user does not need to keep
+        getting a new token.
+
+    Parameters
+    ----------
+        username : str
+            User name
+        password : str, optional
+            Password or None to prompt and enter password
+        token_type : str, optional
+            Type of authentication token ('patric' or 'rast')
+        timeout : integer
+            Number of seconds to wait for response
+
+    Returns
+    -------
+        str
+            Authentication token
     """
 
     # Prompt for a password if not specified.
@@ -22,7 +37,16 @@ def get_patric_token(username, password=None, token_type='rast', timeout=5):
         password = getpass(prompt='{0} password: '.format(token_type))
 
     # Get an authentication token from the specified web service.
-    if token_type == 'rast':
+    if token_type == 'patric':
+        url = 'https://user.patricbrc.org/authenticate'
+        request_data = {'username': username, 'password': password}
+        response = requests.post(url, data=request_data, timeout=timeout)
+        if response.status_code != requests.codes.OK:
+            response.raise_for_status()
+        token = response.text
+        user_id = token.split('|')[0].replace('un=', '')
+
+    elif token_type == 'rast':
         url = 'http://rast.nmpdr.org/goauth/token?grant_type=client_credentials&client_id={0}'.format(username)
         headers = dict()
         headers['Content-Type'] = 'application/json'
@@ -53,9 +77,17 @@ def get_patric_token(username, password=None, token_type='rast', timeout=5):
 def shock_download(url, token):
     """ Download data from a Shock node.
 
-        @param url: URL to Shock node
-        @param token: Authentication token for Patric web services
-        @return Data from Shock node
+    Parameters
+    ----------
+        url : str
+            URL to Shock node
+        token : str
+            Authentication token for Patric web services
+
+    Returns
+    -------
+        str
+            Data from Shock node
     """
 
     response = requests.get(url + '?download', headers={'AUTHORIZATION': 'OAuth ' + token})
@@ -152,9 +184,15 @@ class PatricClient(object):
     def __init__(self, url, name, token=None):
         """ Initialize object.
 
-            @param url: URL of service endpoint
-            @param name: Name of service
-            @param token: Authentication token for Patric web services
+        Parameters
+        ----------
+            url : str
+                URL of service endpoint
+            name : str
+                Name of service
+            token : str, optional
+                Authentication token for Patric web services, when None get the
+                token from the .patric_config file
         """
 
         self.url = url
@@ -179,10 +217,19 @@ class PatricClient(object):
     def call(self, method, params, timeout=1800):
         """ Call a server method and wait for the response.
 
-            @param method: Name of method
-            @param params: Dictionary of input parameters for method
-            @param timeout: Number of seconds to wait for response
-            @return Output of method in JSON format
+        Parameters
+        ----------
+            method: str
+                Name of server method
+            params : dict
+                Dictionary of input parameters for method
+            timeout : integer
+                Number of seconds to wait for response
+
+        Returns
+        -------
+            dict
+                Output of method in JSON format
         """
 
         # Create the body of the request for the specified method.
