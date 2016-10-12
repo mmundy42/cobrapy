@@ -594,7 +594,7 @@ def optimize_modelseed_model(reference, media_reference=None):
     # was just created so get the list of solutions. Last completed
     # solution is first in the list.
     solutions = get_modelseed_fba_solutions(reference)
-    return solutions[0]
+    return solutions[0]['objective']
 
 
 def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=None, likelihood=False, name=None):
