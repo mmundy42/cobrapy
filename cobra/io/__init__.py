@@ -32,5 +32,6 @@ else:
     from .modelseed import get_modelseed_gapfill_solutions, get_modelseed_fba_solutions, list_modelseed_models
     from .modelseed import get_workspace_object_meta, get_workspace_object_data, list_workspace_objects
     from .modelseed import create_cobra_model_from_modelseed_model
+    from .PatricClient import get_patric_token
 
 del libsbml, scipy, requests, warn
