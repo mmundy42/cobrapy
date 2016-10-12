@@ -26,8 +26,10 @@ patric_gene_prefix_re = re.compile(r'^fig\|')
 def delete_modelseed_model(reference):
     """ Delete a ModelSEED model from the workspace.
 
-        @param reference: Workspace reference to model
-        @return: Nothing
+        Parameters
+        ----------
+            reference : str
+                Workspace reference to model
     """
 
     try:
@@ -754,7 +756,7 @@ def list_workspace_objects(folder, sort_key='folder', print_output=False):
         print('Contents of {0}:'.format(folder))
         for object_data in output[folder]:
             otype = '-'
-            if object_data[8]['is_folder']:
+            if object_data[1] == 'folder' or object_data[8]['is_folder']:
                 otype = 'd'
             print('{0}{1}{2} {3:10}\t{4:>10}\t{5}\t{6:12}\t{7}{8}'
                   .format(otype, object_data[9], object_data[10], object_data[5], object_data[6],
