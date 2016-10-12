@@ -213,7 +213,7 @@ def get_modelseed_model_stats(reference):
     return stats
 
 
-def list_modelseed_models(root_path=None):
+def list_modelseed_models(root_path=None, print_output=False):
     """ List the ModelSEED models for the user.
 
         @param root_path: Root path to search for models
@@ -226,9 +226,15 @@ def list_modelseed_models(root_path=None):
 
     try:
         ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
-        return ms_client.call('list_models', params)
+        output = ms_client.call('list_models', params)
     except PatricClient.ServerError as e:
         handle_server_error(e)
+    if not print_output:
+        return output
+    for model in output:
+        print('Model {0} for organism {1} with {2} reactions and {3} metabolites'
+              .format(model['ref'], model['name'], model['num_reactions'], model['num_compounds']))
+    return
 
 
 def _convert_compartment(modelseed_id, format_type):
