@@ -25,11 +25,6 @@ def get_patric_token(username, password=None, token_type='patric', timeout=5):
             Type of authentication token ('patric' or 'rast')
         timeout : integer
             Number of seconds to wait for response
-
-    Returns
-    -------
-        str
-            Authentication token
     """
 
     # Prompt for a password if not specified.
@@ -71,7 +66,7 @@ def get_patric_token(username, password=None, token_type='patric', timeout=5):
     config.set('authentication', 'user_id', user_id)
     config.write(open(config_file, 'w'))
 
-    return token
+    return
 
 
 def shock_download(url, token):
