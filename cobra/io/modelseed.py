@@ -151,13 +151,14 @@ def get_modelseed_gapfill_solutions(reference):
             warn('Gapfill solution {0} has {1} items in solution_reactions list'
                  .format(sol['id'], len(sol['solution_reactions'])))
         sol['reactions'] = dict()
-        for reaction in sol['solution_reactions'][0]:
-            reaction_id = '{0}_{1}'.format(re.sub(modelseed_suffix_re, '', reaction['reaction'].split('/')[-1]),
-                                           reaction['compartment'])
-            sol['reactions'][reaction_id] = reaction
+        if len(sol['solution_reactions']) > 0:  # A gap fill solution can have no reactions
+            for reaction in sol['solution_reactions'][0]:
+                reaction_id = '{0}_{1}'.format(re.sub(modelseed_suffix_re, '', reaction['reaction'].split('/')[-1]),
+                                               reaction['compartment'])
+                sol['reactions'][reaction_id] = reaction
         del sol['solution_reactions']
 
-    # Sort so last completed gap fill is first in list
+    # Sort so last completed gap fill is first in list.
     solutions.sort(key=itemgetter('rundate'), reverse=True)
     return solutions
 
