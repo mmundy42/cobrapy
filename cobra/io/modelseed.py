@@ -13,8 +13,14 @@ from . import PatricClient
 # ModelSEED service endpoint
 modelseed_url = 'https://p3.theseed.org/services/ProbModelSEED'
 
+# Client for running functions on ModelSEED web service
+ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
+
 # Workspace service endpoint
 workspace_url = 'https://p3.theseed.org/services/Workspace'
+
+# Client for running functions on Workspace web service.
+ws_client = PatricClient.PatricClient(workspace_url, 'Workspace')
 
 # Regular expression for compartment suffix on ModelSEED IDs
 modelseed_suffix_re = re.compile(r'_([a-z])\d*$')
@@ -23,17 +29,36 @@ modelseed_suffix_re = re.compile(r'_([a-z])\d*$')
 patric_gene_prefix_re = re.compile(r'^fig\|')
 
 
-def delete_modelseed_model(reference):
-    """ Delete a ModelSEED model from the workspace.
+def _make_modelseed_reference(name):
+    """ Make a workspace reference to an object.
 
-        Parameters
-        ----------
-            reference : str
-                Workspace reference to model
+    Parameters
+    ----------
+        name : str
+            Name of object
+
+    Returns
+    -------
+        str
+            Reference to object in user's modelseed folder
     """
 
+    if ms_client.username is None:
+        ms_client.set_authentication_token()
+    return '/{0}/modelseed/{1}'.format(ms_client.username, name)
+
+
+def delete_modelseed_model(model_id):
+    """ Delete a ModelSEED model from the workspace.
+
+    Parameters
+    ----------
+        model_id : str
+            ID of model
+    """
+
+    reference = _make_modelseed_reference(model_id)
     try:
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
         ms_client.call('delete_model', {'model': reference})
     except PatricClient.ServerError as e:
         handle_server_error(e, [reference])
@@ -41,17 +66,29 @@ def delete_modelseed_model(reference):
     return
 
 
-def gapfill_modelseed_model(reference, media_reference=None, likelihood=False, comprehensive=False, solver=None):
+def gapfill_modelseed_model(model_id, media_reference=None, likelihood=False, comprehensive=False, solver=None):
     """ Run gap fill on a ModelSEED model.
 
-        @param reference: Workspace reference to model
-        @param media_reference: Workspace reference to media to gap fill on (default is complete media)
-        @param likelihood: True to use likelihood-based gap fill
-        @param comprehensive: True to run a comprehensive gap fill
-        @param solver: Name of LP solver
-        @return: Model statistics dictionary
+    Parameters
+    ----------
+        model_id : str
+            ID of model
+        media_reference : str, optional
+            Workspace reference to media to gap fill on (default is complete media)
+        likelihood : bool, optional
+            True to use likelihood-based gap fill
+        comprehensive : bool, optional
+            True to run a comprehensive gap fill
+        solver : str, optional
+            Name of LP solver (None to use default solver as configured in web service)
+
+    Returns
+    -------
+        dict
+            Dictionary of current model statistics
     """
 
+    reference = _make_modelseed_reference(model_id)
     params = dict()
     params['model'] = reference
     params['integrate_solution'] = 1
@@ -67,7 +104,6 @@ def gapfill_modelseed_model(reference, media_reference=None, likelihood=False, c
         params['solver'] = solver
 
     try:
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
         job_id = ms_client.call('GapfillModel', params)
         _wait_for_job(job_id)
     except PatricClient.ServerError as e:
@@ -76,23 +112,30 @@ def gapfill_modelseed_model(reference, media_reference=None, likelihood=False, c
             references.append(media_reference)
         handle_server_error(e, references)
 
-    return get_modelseed_model_stats(reference)
+    return get_modelseed_model_stats(model_id)
 
 
-def get_modelseed_fba_solutions(reference):
+def get_modelseed_fba_solutions(model_id):
     """ Get the list of fba solutions available for a ModelSEED model.
 
-        @param reference: Workspace reference to model
-        @return: List of fba solution data structures
+    Parameters
+    ----------
+        model_id : str
+            ID of model
+
+    Returns
+    -------
+        list
+            List of fba solution data structures
     """
 
-    solutions = None
+    reference = _make_modelseed_reference(model_id)
     try:
-        get_modelseed_model_stats(reference)  # Confirm model exists
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
+        get_modelseed_model_stats(model_id)  # Confirm model exists
         solutions = ms_client.call('list_fba_studies', {'model': reference})
     except PatricClient.ServerError as e:
         handle_server_error(e, [reference])
+        return
 
     # For each solution in the list, get the referenced fba object, and add the
     # details on the flux values to the solution. Note ModelSEED stores the
@@ -129,26 +172,32 @@ def get_modelseed_fba_solutions(reference):
     return solutions
 
 
-def get_modelseed_gapfill_solutions(reference):
+def get_modelseed_gapfill_solutions(model_id):
     """ Get the list of gap fill solutions for a ModelSEED model.
 
-        @param reference: Workspace reference to model
-        @return: List of gap fill solution data structures
+    Parameters
+    ----------
+        model_id : str
+            ID of model
+
+    Returns
+    -------
+        list
+            List of gap fill solution data structures
     """
 
-    solutions = None
+    reference = _make_modelseed_reference(model_id)
     try:
-        get_modelseed_model_stats(reference)  # Confirm model exists
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
+        get_modelseed_model_stats(model_id)  # Confirm model exists
         solutions = ms_client.call('list_gapfill_solutions', {'model': reference})
     except PatricClient.ServerError as e:
         handle_server_error(e, [reference])
 
-    # Convert the data about the gapfilled reactions from a list to a dictionary
+    # Convert the data about the gap filled reactions from a list to a dictionary
     # keyed by reaction ID.
     for sol in solutions:
         if len(sol['solution_reactions']) > 1:
-            warn('Gapfill solution {0} has {1} items in solution_reactions list'
+            warn('Gap fill solution {0} has {1} items in solution_reactions list'
                  .format(sol['id'], len(sol['solution_reactions'])))
         sol['reactions'] = dict()
         if len(sol['solution_reactions']) > 0:  # A gap fill solution can have no reactions
@@ -163,29 +212,43 @@ def get_modelseed_gapfill_solutions(reference):
     return solutions
 
 
-def get_modelseed_model_data(reference):
+def get_modelseed_model_data(model_id):
     """ Get the model data for a ModelSEED model.
 
-        @param reference: Workspace reference to model
-        @return: Model data dictionary
+    Parameters
+    ----------
+        model_id : str
+            Name of model
+
+    Returns
+    -------
+        dict
+            Dictionary of all model data
     """
 
+    reference = _make_modelseed_reference(model_id)
     try:
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
         return ms_client.call('get_model', {'model': reference, 'to': 1})
     except PatricClient.ServerError as e:
         handle_server_error(e, [reference])
 
 
-def get_modelseed_model_stats(reference):
+def get_modelseed_model_stats(model_id):
     """ Get the model statistics for a ModelSEED model.
 
-        @param reference: Workspace reference to model
-        @return: Model statistics dictionary
+    Parameters
+    ----------
+        model_id : str
+            ID of model
+
+    Returns
+    -------
+        dict
+            Dictionary of current model statistics
     """
 
     # The metadata for the model object has the data needed for the dictionary.
-    metadata = get_workspace_object_meta(reference)
+    metadata = get_workspace_object_meta(_make_modelseed_reference(model_id))
 
     # Build the model statistics dictionary.
     stats = dict()
@@ -213,19 +276,27 @@ def get_modelseed_model_stats(reference):
     return stats
 
 
-def list_modelseed_models(root_path=None, print_output=False):
+def list_modelseed_models(base_folder=None, print_output=False):
     """ List the ModelSEED models for the user.
 
-        @param root_path: Root path to search for models
-        @return: List of model what @todo Need details on structure
+    Parameters
+    ----------
+        base_folder : str
+            Workspace reference to folder to search for models
+        print_output : bool, optional
+            When True, print a summary of the list instead of returning the list
+
+    Returns
+    -------
+        list or None
+            List of model statistics dictionaries or None if printed output
     """
 
     params = dict()
-    if root_path is not None:
-        params['path'] = root_path
+    if base_folder is not None:
+        params['path'] = base_folder
 
     try:
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
         output = ms_client.call('list_models', params)
     except PatricClient.ServerError as e:
         handle_server_error(e)
@@ -234,15 +305,26 @@ def list_modelseed_models(root_path=None, print_output=False):
     for model in output:
         print('Model {0} for organism {1} with {2} reactions and {3} metabolites'
               .format(model['ref'], model['name'], model['num_reactions'], model['num_compounds']))
-    return
+    return None
 
 
 def _convert_compartment(modelseed_id, format_type):
     """ Convert a compartment ID in ModelSEED source format to another format.
 
-        @param modelseed_id: Compartment ID in ModelSEED source format
-        @param format_type: Type of format to convert to
-        @return: ID in specified format
+        Currently the supported format types are 'modelseed' and 'bigg'. No
+        conversion is done for unknown format types.
+
+    Parameters
+    ----------
+        modelseed_id : str
+            Compartment ID in ModelSEED source format
+        format_type : str
+            Type of format to convert to
+
+    Returns
+    -------
+        str
+            ID in specified format
     """
 
     if format_type == 'modelseed' or format_type == 'bigg':
@@ -254,9 +336,20 @@ def _convert_compartment(modelseed_id, format_type):
 def _convert_suffix(modelseed_id, format_type):
     """ Convert a string with a compartment suffix from ModelSEED source format to another format.
 
-        @param modelseed_id: String with compartment suffix in ModelSEED source format
-        @param format_type: Type of format to convert to
-        @return: ID in specified format
+        Currently the supported format types are 'modelseed' and 'bigg'. No
+        conversion is done for unknown format types.
+
+    Parameters
+    ----------
+        modelseed_id : str
+            ID with compartment suffix in ModelSEED source format
+        format_type : str
+            Type of format to convert to
+
+    Returns
+    -------
+        str
+            ID in specified format
     """
 
     # Remove compartment index number for ModelSEED format. For example, rxn00001_c0 becomes rxn00001_c.
@@ -278,10 +371,19 @@ def _convert_suffix(modelseed_id, format_type):
 def _add_metabolite(modelseed_compound, model, id_type):
     """ Create a COBRApy Metabolite object from a ModelSEED compound dictionary and add it to COBRApy model.
 
-        @param modelseed_compound: Compound dictionary from ModelSEED model
-        @param model: COBRApy Model object to add metabolite to
-        @param id_type: Type of metabolite ID
-        @return: True when metabolite is a duplicate
+    Parameters
+    ----------
+        modelseed_compound : dict
+            Compound dictionary from ModelSEED model
+        model : cobra.Model
+            Model object to add metabolite to
+        id_type : str
+            Type of metabolite ID
+
+    Returns
+    -------
+        bool
+            True when metabolite is a duplicate
     """
 
     # Convert from ModelSEED format to COBRApy format.
@@ -321,11 +423,16 @@ def _add_metabolite(modelseed_compound, model, id_type):
 def _add_reaction(modelseed_reaction, model, id_type, likelihoods):
     """ Create a COBRApy Reaction object from a ModelSEED reaction dictionary and add it to COBRApy model.
 
-        @param modelseed_reaction: Reaction dictionary from ModelSEED model
-        @param model: COBRApy Model object to add reaction to
-        @param id_type: Type of reaction ID
-        @param likelihoods: Dictionary with reaction likelihoods from ModelSEED model
-        @return: Nothing
+    Parameters
+    ----------
+        modelseed_reaction : dict
+            Reaction dictionary from ModelSEED model
+        model : cobra.Model
+            Model object to add reaction to
+        id_type : str
+            Type of reaction ID
+        likelihoods : dict
+            Dictionary with reaction likelihoods from ModelSEED model
     """
 
     # Set upper and lower bounds based directionality. Switch reverse reactions to forward reactions (ModelSEED
@@ -414,8 +521,8 @@ def _add_reaction(modelseed_reaction, model, id_type, likelihoods):
 
             reaction.gene_reaction_rule = gpr_rule
 
-    # Add a note with gapfill details. ModelSEED gapfill data is a dictionary where the key is the
-    # gapfill solution ID and the value indicates if the reaction was added or reversed and the
+    # Add a note with gap fill details. ModelSEED gap fill data is a dictionary where the key is the
+    # gap fill solution ID and the value indicates if the reaction was added or reversed and the
     # direction of the reaction. For example: {u'gf.0': u'added:>'}
     if len(modelseed_reaction['gapfill_data']) > 0:
         reaction.notes['gapfill_data'] = modelseed_reaction['gapfill_data']
@@ -430,13 +537,22 @@ def _add_reaction(modelseed_reaction, model, id_type, likelihoods):
     return
 
 
-def create_cobra_model_from_modelseed_model(reference, id_type='modelseed', validate=False):
+def create_cobra_model_from_modelseed_model(model_id, id_type='modelseed', validate=False):
     """ Create a COBRA model from a ModelSEED model.
 
-        @param reference: Workspace reference to model
-        @param id_type: Type of IDs ('modelseed' for _c or 'bigg' for '[c])
-        @param validate: When True, check for common problems
-        @return COBRApy Model object
+    Parameters
+    ----------
+        model_id : str
+            ID of model
+        id_type : str
+            Type of IDs ('modelseed' for _c or 'bigg' for '[c])
+        validate : bool
+            When True, check for common problems
+
+    Returns
+    -------
+        cobra.Model
+            Model object
     """
 
     # Validate the id_type parameter.
@@ -448,14 +564,13 @@ def create_cobra_model_from_modelseed_model(reference, id_type='modelseed', vali
         raise ValueError('id_type {0} is not supported'.format(id_type))
 
     # Get the ModelSEED model data.
-    data = get_modelseed_model_data(reference)
+    data = get_modelseed_model_data(model_id)
+    reference = _make_modelseed_reference(model_id)
 
     # Get the workspace object with the likelihoods and put the likelihood values in a dictionary
     # keyed by reaction ID. Calculating likelihoods is optional so the object may not exist.
     try:
         likelihood_data = get_workspace_object_data(join(reference, 'rxnprobs'))
-        # for reaction_data in likelihood_data['reaction_probabilities']:
-        #     likelihoods[reaction_data[0]] = reaction_data[1]
         likelihoods = {r[0]: r[1] for r in likelihood_data['reaction_probabilities']}
     except PatricClient.ObjectNotFoundError:
         likelihoods = dict()
@@ -564,15 +679,23 @@ def create_cobra_model_from_modelseed_model(reference, id_type='modelseed', vali
     return model
 
 
-def optimize_modelseed_model(reference, media_reference=None):
+def optimize_modelseed_model(model_id, media_reference=None):
     """ Run flux balance analysis on a ModelSEED model.
 
-        @param reference: Reference to model
-        @param media_reference: Reference to media to optimize on (default is complete media)
-        @return: Flux balance analysis data structure
+    Parameters
+    ----------
+        model_id : str
+            ID of model
+        media_reference : str
+            Workspace reference to media to optimize on (default is complete media)
+    Returns
+    -------
+        float
+            Objective value
     """
 
     # Set input parameters for method.
+    reference = _make_modelseed_reference(model_id)
     params = dict()
     params['model'] = reference
     params['predict_essentiality'] = 1
@@ -581,7 +704,6 @@ def optimize_modelseed_model(reference, media_reference=None):
 
     # Run the server method.
     try:
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
         job_id = ms_client.call('FluxBalanceAnalysis', params)
         _wait_for_job(job_id)
     except PatricClient.ServerError as e:
@@ -593,19 +715,30 @@ def optimize_modelseed_model(reference, media_reference=None):
     # The completed job does not have the reference to the fba object that
     # was just created so get the list of solutions. Last completed
     # solution is first in the list.
-    solutions = get_modelseed_fba_solutions(reference)
-    return solutions[0]['objective']
+    solutions = get_modelseed_fba_solutions(model_id)
+    return float(solutions[0]['objective'])
 
 
-def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=None, likelihood=False, name=None):
+def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=None, likelihood=False, model_id=None):
     """ Reconstruct a draft ModelSEED model for an organism.
 
-        @param genome_id: Genome ID or workspace reference to genome
-        @param source: Source of genome
-        @param template_reference: Reference to template model
-        @param likelihood: True to generate reaction likelihoods
-        @param name: Name of output model
-        @return: Model statistics dictionary
+    Parameters
+    ----------
+        genome_id : str
+            Genome ID or workspace reference to genome
+        source : str, optional
+            Source of genome
+        template_reference : str, optional
+            Workspace reference to template model
+        likelihood : bool, optional
+            True to generate reaction likelihoods
+        model_id : str, optional
+            ID of output model (default is genome ID)
+
+    Returns
+    -------
+        dict
+            Dictionary of current model statistics
     """
 
     # Set input parameters for method.
@@ -618,9 +751,9 @@ def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=N
         params['genome'] = genome_id
     else:
         raise ValueError('Source type {0} is not supported'.format(source))
-    if name is None:
-        name = genome_id
-    params['output_file'] = name
+    if model_id is None:
+        model_id = genome_id
+    params['output_file'] = model_id
     if template_reference is not None:
         params['templatemodel'] = template_reference
     if likelihood:
@@ -632,7 +765,6 @@ def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=N
 
     # Run the server method.
     try:
-        ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
         job_id = ms_client.call('ModelReconstruction', params)
     except PatricClient.ServerError as e:
         references = None
@@ -641,11 +773,10 @@ def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=N
         handle_server_error(e, references)
 
     # The task structure has the workspace where the model is stored but not the name of the model.
-    task = _wait_for_job(job_id)
-    reference = task['workspace'] + name
+    _wait_for_job(job_id)
 
     # Get the model statistics for the model.
-    stats = get_modelseed_model_stats(reference)
+    stats = get_modelseed_model_stats(model_id)
     if stats['num_genes'] == 0:  # ModelSEED does not return an error if the genome ID is invalid
         warn('Model for genome ID {0} has no genes, verify genome ID is valid'.format(genome_id))
     return stats
@@ -654,13 +785,24 @@ def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=N
 def _wait_for_job(jobid):
     """ Wait for a job submitted to the ModelSEED app service to end.
 
-        @param jobid: ID of submitted job
-        @return Task structure with status of job
+    Parameters
+    ----------
+        jobid : str
+            ID of submitted job
+
+    Returns
+    -------
+        dict
+            Task structure with status of job
+
+    Raises
+    ------
+        JobError
+            When a job with the specified ID was not found
     """
 
     task = None
     done = False
-    ms_client = PatricClient.PatricClient(modelseed_url, 'ProbModelSEED')
     while not done:
         jobs = ms_client.call('CheckJobs', {'jobs': [jobid]})
         if jobid in jobs:
@@ -679,14 +821,20 @@ def _wait_for_job(jobid):
 def get_workspace_object_meta(reference):
     """ Get the metadata for an object.
 
-        @param reference: Reference to object in workspace
-        @return ObjectMeta tuple with metadata
+    Parameters
+    ----------
+        reference : str
+            Workspace reference to object
+
+    Returns
+    -------
+        dict
+            ObjectMeta tuple with metadata
     """
 
     try:
         # The output from get() is a list of tuples.  When asking for metadata only,
         # the list entry is a tuple with only one element.
-        ws_client = PatricClient.PatricClient(workspace_url, 'Workspace')
         metadata_list = ws_client.call('get', {'objects': [reference], 'metadata_only': 1})
         return metadata_list[0][0]
     except PatricClient.ServerError as e:
@@ -696,9 +844,17 @@ def get_workspace_object_meta(reference):
 def get_workspace_object_data(reference, json_data=True):
     """ Get the data for an object.
 
-        @param reference: Reference to object in workspace
-        @param json_data: When True, return data in JSON format
-        @return Object data
+    Parameters
+    ----------
+        reference : str
+            Workspace reference to object
+        json_data : bool, optional
+            When True, convert data from returned JSON format
+
+    Returns
+    -------
+        data
+            Object data (can be dict, list, or string)
     """
 
     data = None
@@ -707,10 +863,9 @@ def get_workspace_object_data(reference, json_data=True):
         # tuple is the metadata which has the url to the Shock node when the
         # data is stored in Shock. Otherwise the data is available in the second
         # element of the tuple.
-        ws_client = PatricClient.PatricClient(workspace_url, 'Workspace')
         object_list = ws_client.call('get', {'objects': [reference]})
         if len(object_list[0][0][11]) > 0:
-            data = PatricClient.shock_download(object_list[0][0][11], ws_client.token)
+            data = PatricClient.shock_download(object_list[0][0][11], ws_client.headers['AUTHORIZATION'])
         else:
             data = object_list[0][1]
     except Exception as e:
@@ -724,15 +879,23 @@ def get_workspace_object_data(reference, json_data=True):
 def list_workspace_objects(folder, sort_key='folder', print_output=False):
     """ List the objects in the specified workspace folder.
 
-        @param folder: Path to workspace folder
-        @param sort_key: Name of field to use as sort key for output
-        @param print_output: When True, print formatted output
-        @return: List of object data for objects in folder or None if printed output
+    Parameters
+    ----------
+        folder : str
+            Workspace reference to folder
+        sort_key : str, optional
+            Name of field to use as sort key for output
+        print_output : bool, optional
+            When True, print formatted output instead of returning the list
+
+    Returns
+    -------
+        list or None
+            List of object data for objects in folder or None if printed output
     """
 
     # Get the list of objects in the specified folder.
     try:
-        ws_client = PatricClient.PatricClient(workspace_url, 'Workspace')
         output = ws_client.call('ls', {'paths': [folder], 'recursive': 1})
     except PatricClient.ServerError as e:
         handle_server_error(e, [folder])
@@ -776,10 +939,23 @@ def list_workspace_objects(folder, sort_key='folder', print_output=False):
 def handle_server_error(e, references=None):
     """ Handle an error returned by a PATRIC service server.
 
-        @param e: Exception returned by server
-        @param references: List of workspace references for server method
-        @return: Nothing
-        @raise: ObjectNotFoundError
+    Parameters
+    ----------
+        e : Exception
+            Exception returned by server
+        references : list
+            List of workspace references in input parameters of server method
+
+    Raises
+    -------
+        ObjectNotFoundError
+            When server method had a problem with a workspace reference
+        DuplicateGapfillError
+            When a gap fill solution already exists for a media condition
+        ObjectTypeError
+            When a workspace reference refers to an object of the wrong type
+        Exception
+            Source exception for all other cases
     """
 
     # Map a generic server error to a specific exception.
@@ -809,7 +985,7 @@ def handle_server_error(e, references=None):
             msg = 'An object reference is not a valid path: {0}'.format(reference_string)
             raise PatricClient.ObjectNotFoundError(msg, e.data)
 
-        if 'No gapfilling needed on specified condition' in e.message:
+        if 'No gap filling needed on specified condition' in e.message:
             raise PatricClient.DuplicateGapfillError('Gap fill solution already available for specified media')
 
         if 'does not match specified type' in e.message:

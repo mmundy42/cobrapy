@@ -173,6 +173,10 @@ class JobError(Exception):
     pass
 
 
+class AuthenticationError(Exception):
+    """ Exception raised when there is a problem with authentication token. """
+
+
 class PatricClient(object):
     """ Client for Patric web services """
 
@@ -187,25 +191,18 @@ class PatricClient(object):
                 Name of service
             token : str, optional
                 Authentication token for Patric web services, when None get the
-                token from the .patric_config file
+                token from the .patric_config file when calling a method
         """
 
         self.url = url
         self.name = name
-
-        if token is None:
-            # Get the authentication token from the Patric config file.
-            config = configparser.ConfigParser()
-            config.read(path.join(environ['HOME'], '.patric_config'))
-            self.token = config.get('authentication', 'token')
-            self.user_id = config.get('authentication', 'user_id')
-        else:
-            self.token = token
-            self.user_id = token.split('|')[0].replace('un=', '')
+        self.username = None
+        if token is not None:
+            self.username = token.split('|')[0].replace('un=', '')
 
         # Create the headers for the request to the server.
         self.headers = dict()
-        self.headers['AUTHORIZATION'] = self.token
+        self.headers['AUTHORIZATION'] = token
 
         return
 
@@ -223,9 +220,13 @@ class PatricClient(object):
 
         Returns
         -------
-            dict
+            data
                 Output of method in JSON format
         """
+
+        # If needed, look for the authentication token in the Patric config file.
+        if self.headers['AUTHORIZATION'] is None:
+            self.set_authentication_token()
 
         # Create the body of the request for the specified method.
         request_data = dict()
@@ -250,3 +251,15 @@ class PatricClient(object):
         if response.status_code != requests.codes.OK:
             response.raise_for_status()
         return json.loads(response.text)['result'][0]  # Get the output from the method in the response
+
+    def set_authentication_token(self):
+        """ Set the authentication token from the config file. """
+
+        config = configparser.ConfigParser()
+        config.read(path.join(environ['HOME'], '.patric_config'))
+        try:
+            self.headers['AUTHORIZATION'] = config.get('authentication', 'token')
+            self.username = config.get('authentication', 'user_id')
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            self.headers['AUTHORIZATION'] = None
+            raise AuthenticationError('Call get_patric_token() to obtain an authentication token')
