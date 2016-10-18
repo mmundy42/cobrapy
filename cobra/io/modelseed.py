@@ -28,6 +28,9 @@ modelseed_suffix_re = re.compile(r'_([a-z])\d*$')
 # Regular expression for prefix on PATRIC gene IDs
 patric_gene_prefix_re = re.compile(r'^fig\|')
 
+# Name of folder where ModelSEED models are stored
+model_folder = 'modelseed'
+
 
 def _make_modelseed_reference(name):
     """ Make a workspace reference to an object.
@@ -45,7 +48,7 @@ def _make_modelseed_reference(name):
 
     if ms_client.username is None:
         ms_client.set_authentication_token()
-    return '/{0}/modelseed/{1}'.format(ms_client.username, name)
+    return '/{0}/{1}/{2}'.format(ms_client.username, model_folder, name)
 
 
 def delete_modelseed_model(model_id):
@@ -857,6 +860,20 @@ def reconstruct_modelseed_model(genome_id, source='PATRIC', template_reference=N
         params['probanno'] = 0
     params['gapfill'] = 0
     params['predict_essentiality'] = 0
+
+    # Workaround for ModelSEED workspace bug. The user's modelseed folder must exist before saving
+    # the model. Otherwise the type of the folder created for the model is not "modelfolder" and
+    # subsequent operations on the model will fail.
+    try:
+        if ws_client.username is None:
+            ws_client.set_authentication_token()
+        reference = '/{0}'.format(ws_client.username)
+        output = ws_client.call('ls', {'paths': [reference]})
+        if model_folder not in output:
+            reference = join(reference, model_folder)
+            ws_client.call('create', {'objects': [[reference, 'folder']]})
+    except PatricClient.ServerError as e:
+        handle_server_error(e, [reference])
 
     # Run the server method.
     try:
