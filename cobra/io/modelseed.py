@@ -561,8 +561,10 @@ def create_cobra_model_from_modelseed_model(model_id, id_type='modelseed', valid
     # Validate the id_type parameter.
     if id_type == 'modelseed':
         cytosol_suffix = '_c'
+        extracellular_suffix_re = re.compile(r'_e')
     elif id_type == 'bigg':
         cytosol_suffix = '[c]'
+        extracellular_suffix_re = re.compile(r'\[e\]')
     else:
         raise ValueError('id_type {0} is not supported'.format(id_type))
 
@@ -608,7 +610,7 @@ def create_cobra_model_from_modelseed_model(model_id, id_type='modelseed', valid
         metabolite = model.metabolites[index]
         if metabolite.compartment.startswith('e'):
             # Single reactant metabolite makes a system boundary reaction.
-            reaction = Reaction(id='EX_' + metabolite.id,
+            reaction = Reaction(id='EX_' + re.sub(extracellular_suffix_re, '', metabolite.id),
                                 name=metabolite.name + ' exchange',
                                 lower_bound=-1000.0,
                                 upper_bound=1000.0)  # @todo Should the upper bound be 0?
