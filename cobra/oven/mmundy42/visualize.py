@@ -236,14 +236,14 @@ def save_visual_json_model(model, file_name, pathways=None, pretty=False, thresh
             try:
                 reaction_data['pathway'] = pathways['reactions'][reaction.id]
             except KeyError:
-                pass
+                reaction_data['pathway'] = list()
 
         # Add the reaction node.
         visual_model['nodes'].append(reaction_data)
 
     # Add the pathway names if needed.
     if pathways is not None:
-        visual_model['pathways'] = pathways['names']
+        visual_model['pathways'] = pathways['pathways']
 
     # Create the json file with the visual model.
     if pretty:
