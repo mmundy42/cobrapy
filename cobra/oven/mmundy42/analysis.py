@@ -137,3 +137,124 @@ def exchange_reactions(model):
     print_(tabulate(output, tablefmt='simple', headers=['ID', 'NAME', 'DEFINITION']))
 
     return
+
+def compare_models():
+    parser = argparse.ArgumentParser(prog='compare-models')
+    parser.add_argument('model1', help='path to sbml file of first model')
+    parser.add_argument('model2', help='path to sbml file of second model')
+    parser.add_argument('--source1', help='source system that generated first model', default='modelbuilder')
+    parser.add_argument('--source2', help='source system that generated second model', default='modelseed')
+    parser.add_argument('--detail', help='show details on reaction and metabolite differences', action='store_true', default=False)
+    parser.add_argument('--boundary', help='compare boundary reactions', action='store_true', default=False)
+    args = parser.parse_args()
+
+    # Read the SBML files for the two models to compare.
+    print 'Reading first model from {0}'.format(args.model1)
+    model1 = cobra.io.read_sbml_model(args.model1)
+    print 'Reading second model from {0}'.format(args.model2)
+    model2 = cobra.io.read_sbml_model(args.model2)
+
+    # A model created by the ModelSEED service includes a compartment index number at the end of
+    # every reaction ID and metabolite ID. Remove the compartment index number so comparisons by
+    # ID do not adjustment later.
+    if args.source1 == 'modelseed':
+        trim_index(model1)
+
+    if args.source2 == 'modelseed':
+        trim_index(model2)
+        # trim_index = re.compile(r'[\d]+$')
+        # for r2 in model2.reactions:
+        #     r2.id = re.sub(trim_index, '', r2.id)
+        # model2.repair()
+
+    # Compare reactions.
+    print '{0} reactions in first model'.format(len(model1.reactions))
+    print '{0} reactions in second model'.format(len(model2.reactions))
+
+    # See if reactions from first model are in the second model.
+    num_matched = 0
+    num_only_in_one = 0
+    for r1 in model1.reactions:
+        try:
+            lookup = r1.id #+'0' # Need to adjust based on source options
+            r2 = model2.reactions.get_by_id(lookup)
+            num_matched += 1
+        except KeyError:
+            num_only_in_one += 1
+            if args.detail:
+                print 'Reaction {0} is not in second model'.format(lookup)
+    print '{0} reactions in both models'.format(num_matched)
+    print '{0} reactions only in first'.format(num_only_in_one)
+
+    # See if reactions from second model are in the first model.
+    num_matched = 0
+    num_only_in_two = 0
+    for r2 in model2.reactions:
+        try:
+            lookup = r2.id[:-1] # Need to adjust based on source options
+            r1 = model1.reactions.get_by_id(lookup)
+            num_matched += 1
+        except KeyError:
+            num_only_in_two += 1
+            if args.detail:
+                print 'Reaction {0} is not in first model'.format(lookup)
+    print '{0} reactions in both models'.format(num_matched)
+    print '{0} reactions only in second'.format(num_only_in_two)
+
+    # Compare metabolites.
+    print '{0} metabolites in first model'.format(len(model1.metabolites))
+    print '{0} metabolites in second model'.format(len(model2.metabolites))
+
+    # See if metabolites from first model are in the second model.
+    num_matched = 0
+    num_only_in_one = 0
+    for m1 in model1.metabolites:
+        try:
+            if m1.id.endswith('_b'): # Need to adjust based on source options
+                lookup = m1.id
+            else:
+                lookup = m1.id+'0'
+            m2 = model2.metabolites.get_by_id(lookup)
+            num_matched += 1
+        except KeyError:
+            num_only_in_one += 1
+            if args.detail:
+                print 'Metabolite {0} is not in second model'.format(lookup)
+    print '{0} metabolites in both models'.format(num_matched)
+    print '{0} metabolites only in first'.format(num_only_in_one)
+
+    # See if metabolites from second model are in the first model.
+    num_matched = 0
+    num_only_in_two = 0
+    for m2 in model2.metabolites:
+        try:
+            if m2.id.endswith('_b'): # Need to adjust based on source options
+                lookup = m2.id
+            else:
+                lookup = m2.id[:-1]
+            m1 = model1.metabolites.get_by_id(lookup)
+            num_matched += 1
+        except KeyError:
+            num_only_in_two += 1
+            if args.detail:
+                print 'Metabolite {0} is not in first model'.format(lookup)
+    print '{0} metabolites in both models'.format(num_matched)
+    print '{0} metabolites only in second'.format(num_only_in_two)
+
+    # See about system boundary reactions.
+    if args.boundary:
+        # Get the list of system boundary reactions from first model.
+        model1_boundary = list()
+        for r1 in model1.reactions:
+            if r1.boundary == 'system_boundary':
+                model1_boundary.append(r1)
+        print '{0} reactions are system boundary reactions in first model'.format(len(model1_boundary))
+
+        # Get the list of system boundary reactions from second model.
+        model2_boundary = list()
+        for r2 in model2.reactions:
+            if r2.boundary == 'system_boundary':
+                model2_boundary.append(r1)
+        print '{0} reactions are system boundary reactions in second model'.format(len(model2_boundary))
+
+    return
