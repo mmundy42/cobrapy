@@ -36,4 +36,17 @@ else:
     from .modelseed import create_cobra_model_from_modelseed_model
     from .PatricClient import get_patric_token
 
+try:
+    import requests
+except ImportError:
+    warn("cobra.io.modelseed requires requests")
+    requests = None
+else:
+    from .modelseed import reconstruct_modelseed_model, gapfill_modelseed_model, optimize_modelseed_model
+    from .modelseed import delete_modelseed_model, get_modelseed_model_data, get_modelseed_model_stats
+    from .modelseed import get_modelseed_gapfill_solutions, get_modelseed_fba_solutions, list_modelseed_models
+    from .modelseed import get_workspace_object_meta, get_workspace_object_data, list_workspace_objects
+    from .modelseed import create_cobra_model_from_modelseed_model
+    from .PatricClient import get_patric_token
+
 del libsbml, scipy, requests, warn
