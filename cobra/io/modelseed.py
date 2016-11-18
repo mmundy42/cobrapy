@@ -533,6 +533,9 @@ def _add_reaction(modelseed_reaction, model, id_type, likelihoods):
     # Add a note with likelihood value if available.
     if modelseed_reaction['id'] in likelihoods:
         reaction.notes['likelihood'] = likelihoods[modelseed_reaction['id']]
+        reaction.notes['likelihood_str'] = '{0:.6f}'.format(reaction.notes['likelihood'])
+    else:
+        reaction.notes['likelihood_str'] = 'unknown'
 
     # Finally, add the reaction to the model.
     model.add_reaction(reaction)
@@ -561,10 +564,8 @@ def create_cobra_model_from_modelseed_model(model_id, id_type='modelseed', valid
     # Validate the id_type parameter.
     if id_type == 'modelseed':
         cytosol_suffix = '_c'
-        extracellular_suffix_re = re.compile(r'_e')
     elif id_type == 'bigg':
         cytosol_suffix = '[c]'
-        extracellular_suffix_re = re.compile(r'\[e\]')
     else:
         raise ValueError('id_type {0} is not supported'.format(id_type))
 
@@ -610,11 +611,12 @@ def create_cobra_model_from_modelseed_model(model_id, id_type='modelseed', valid
         metabolite = model.metabolites[index]
         if metabolite.compartment.startswith('e'):
             # Single reactant metabolite makes a system boundary reaction.
-            reaction = Reaction(id='EX_' + re.sub(extracellular_suffix_re, '', metabolite.id),
+            reaction = Reaction(id='EX_' + metabolite.id,
                                 name=metabolite.name + ' exchange',
                                 lower_bound=-1000.0,
-                                upper_bound=1000.0)  # @todo Should the upper bound be 0?
+                                upper_bound=1000.0)
             reaction.add_metabolites({metabolite: -1.0})
+            reaction.notes['likelihood_str'] = 'n/a'
             model.add_reaction(reaction)
 
     # A ModelSEED model must have an exchange reaction for the special biomass metabolite.
