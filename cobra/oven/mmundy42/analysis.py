@@ -215,6 +215,7 @@ def compare_models(model1, model2, detail=False, boundary=False):
     print_('{0} reactions in {1} and {2}'.format(num_matched, model1.id, model2.id))
     print_('{0} reactions only in {1}\n'.format(len(reaction_only_in_one), model1.id))
     if detail and len(reaction_only_in_one) > 0:
+        reaction_only_in_one.sort(key=lambda x: x.id)
         output = [[rxn.id, rxn.notes['likelihood_str'], format_long_string(rxn.name, 70)]
                   for rxn in reaction_only_in_one]
         print_(tabulate(output, tablefmt='simple', headers=reaction_header) + '\n')
@@ -230,6 +231,7 @@ def compare_models(model1, model2, detail=False, boundary=False):
     print_('{0} reactions in both {1} and {2}'.format(num_matched, model2.id, model1.id))
     print_('{0} reactions only in {1}\n'.format(len(reaction_only_in_two), model2.id))
     if detail and len(reaction_only_in_two) > 0:
+        reaction_only_in_two.sort(key=lambda x: x.id)
         output = [[rxn.id, rxn.notes['likelihood_str'], format_long_string(rxn.name, 70)]
                   for rxn in reaction_only_in_two]
         print_(tabulate(output, tablefmt='simple', headers=reaction_header) + '\n')
@@ -256,6 +258,7 @@ def compare_models(model1, model2, detail=False, boundary=False):
     print_('{0} metabolites in both {1} and {2}'.format(num_matched, model1.id, model2.id))
     print_('{0} metabolites only in {1}\n'.format(len(metabolite_only_in_one), model1.id))
     if detail and len(metabolite_only_in_one) > 0:
+        metabolite_only_in_one.sort(key=lambda x: x.id)
         output = [[met.id, format_long_string(met.name, 70)] for met in metabolite_only_in_one]
         print_(tabulate(output, tablefmt='simple', headers=metabolite_header) + '\n')
 
@@ -270,6 +273,7 @@ def compare_models(model1, model2, detail=False, boundary=False):
     print_('{0} metabolites in both {1} and {2}'.format(num_matched, model2.id, model1.id))
     print_('{0} metabolites only in {1}\n'.format(len(metabolite_only_in_two), model2.id))
     if detail and len(metabolite_only_in_two) > 0:
+        metabolite_only_in_two.sort(key=lambda x: x.id)
         output = [[met.id, format_long_string(met.name, 70)] for met in metabolite_only_in_two]
         print_(tabulate(output, tablefmt='simple', headers=metabolite_header) + '\n')
 
